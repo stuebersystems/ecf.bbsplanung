@@ -1,0 +1,262 @@
+﻿#region ENBREA - Copyright (C) 2020 STÜBER SYSTEMS GmbH
+/*    
+ *    ENBREA
+ *    
+ *    Copyright (C) 2020 STÜBER SYSTEMS GmbH
+ *
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU Affero General Public License, version 3,
+ *    as published by the Free Software Foundation.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *    GNU Affero General Public License for more details.
+ *
+ *    You should have received a copy of the GNU Affero General Public License
+ *    along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+#endregion
+
+using Enbrea.BbsPlanung.Db;
+using Enbrea.Csv;
+using Enbrea.Ecf;
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Ecf.BbsPlanung
+{
+    public class ExportManager : CustomManager
+    {
+        private int _recordCounter = 0;
+        private int _tableCounter = 0;
+
+        public ExportManager(
+            Configuration config,
+            CancellationToken cancellationToken = default,
+            EventWaitHandle cancellationEvent = default)
+            : base(config, cancellationToken, cancellationEvent)
+        {
+        }
+
+        public async override Task Execute(bool ThrowExecptions = false)
+        {
+            var bbsPlanungDbReader = new BbsPlanungDbReader(_config.EcfExport.DatabaseConnection);
+            try
+            {
+                // Init counters
+                _tableCounter = 0;
+                _recordCounter = 0;
+
+                // Report status
+                Console.WriteLine("[Extracting] Start...");
+
+                // Preperation
+                PrepareExportFolder();
+
+                // Education
+                await Execute(EcfTables.Teachers, bbsPlanungDbReader, async (r, w, h) => await ExportTeachers(r, w, h));
+                await Execute(EcfTables.SchoolClasses, bbsPlanungDbReader, async (r, w, h) => await ExportSchoolClasses(r, w, h));
+                await Execute(EcfTables.Students, bbsPlanungDbReader, async (r, w, h) => await ExportStudents(r, w, h));
+                await Execute(EcfTables.StudentSchoolClassAttendances, bbsPlanungDbReader, async (r, w, h) => await ExportStudentSchoolClassAttendances(r, w, h));
+
+                // Report status
+                Console.WriteLine($"[Extracting] {_tableCounter} table(s) and {_recordCounter} record(s) extracted");
+            }
+            catch (Exception ex)
+            {
+                if (!ThrowExecptions)
+                {
+                    // Report error 
+                    Console.WriteLine();
+                    Console.WriteLine($"[Error] Extracting failed. Only {_tableCounter} table(s) and {_recordCounter} record(s) extracted");
+                    Console.WriteLine($"[Error] Reason: {ex.Message}");
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+
+        private async Task Execute(string ecfTableName, BbsPlanungDbReader bbsPlanungDbReader, Func<BbsPlanungDbReader, EcfTableWriter, string[], Task<int>> action)
+        {
+            EcfExportFile ecfFile = _config.EcfExport?.Files?.FirstOrDefault(x => x.Name.ToLower() == ecfTableName.ToLower());
+            if (ecfFile != null)
+            {
+                // Report status
+                Console.WriteLine($"[Extracting] [{ecfTableName}] Start...");
+
+                // Generate ECF file name
+                var ecfFileName = Path.ChangeExtension(Path.Combine(_config.EcfExport.FolderName, ecfTableName), "csv");
+
+                // Create ECF file for export
+                using var ecfWriterStream = new FileStream(ecfFileName, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+
+                // Create ECF Writer
+                using var ecfWriter = new CsvWriter(ecfWriterStream, Encoding.UTF8);
+
+                // Call table specific action
+                var ecfRecordCounter = await action(bbsPlanungDbReader, new EcfTableWriter(ecfWriter), ecfFile.Headers);
+
+                // Inc counters
+                _recordCounter += ecfRecordCounter;
+                _tableCounter++;
+
+                // Report status
+                Console.WriteLine($"[Extracting] [{ecfTableName}] {ecfRecordCounter} record(s) extracted");
+            }
+        }
+
+        private async Task<int> ExportSchoolClasses(BbsPlanungDbReader bbsPlanungDbReader, EcfTableWriter ecfTableWriter, string[] ecfHeaders)
+        {
+            var ecfRecordCounter = 0;
+
+            if (ecfHeaders != null && ecfHeaders.Length > 0)
+            {
+                await ecfTableWriter.WriteHeadersAsync(ecfHeaders);
+            }
+            else
+            {
+                await ecfTableWriter.WriteHeadersAsync(
+                    EcfHeaders.Id,
+                    EcfHeaders.Code,
+                    EcfHeaders.Notes);
+            }
+
+            await foreach (var schoolClass in bbsPlanungDbReader.SchoolClassesAsync(_config.EcfExport.SchoolNo))
+            {
+                ecfTableWriter.TrySetValue(EcfHeaders.Id, schoolClass.Code);
+                ecfTableWriter.TrySetValue(EcfHeaders.Code, schoolClass.Code);
+                ecfTableWriter.TrySetValue(EcfHeaders.Teacher1Id, schoolClass.Teacher);
+                ecfTableWriter.TrySetValue(EcfHeaders.Notes, schoolClass.Notes);
+
+                await ecfTableWriter.WriteAsync();
+
+                ecfRecordCounter++;
+            }
+
+            return ecfRecordCounter;
+        }
+
+        private async Task<int> ExportStudents(BbsPlanungDbReader bbsPlanungDbReader, EcfTableWriter ecfTableWriter, string[] ecfHeaders)
+        {
+            var ecfRecordCounter = 0;
+
+            if (ecfHeaders != null && ecfHeaders.Length > 0)
+            {
+                await ecfTableWriter.WriteHeadersAsync(ecfHeaders);
+            }
+            else
+            {
+                await ecfTableWriter.WriteHeadersAsync(
+                    EcfHeaders.Id,
+                    EcfHeaders.LastName,
+                    EcfHeaders.FirstName,
+                    EcfHeaders.Gender,
+                    EcfHeaders.Birthdate,
+                    EcfHeaders.StudentNo);
+            }
+
+            await foreach (var student in bbsPlanungDbReader.StudentsAsync(_config.EcfExport.SchoolNo))
+            {
+                ecfTableWriter.TrySetValue(EcfHeaders.Id, student.Id.ToString());
+                ecfTableWriter.TrySetValue(EcfHeaders.LastName, student.Lastname);
+                ecfTableWriter.TrySetValue(EcfHeaders.FirstName, student.Firstname);
+                ecfTableWriter.TrySetValue(EcfHeaders.Gender, student.GetGender());
+                ecfTableWriter.TrySetValue(EcfHeaders.Birthdate, student.GetBirthdate());
+                //ecfTableWriter.TrySetValue(EcfHeaders.StudentNo, student.StudentNo);
+
+                await ecfTableWriter.WriteAsync();
+
+                ecfRecordCounter++;
+            }
+
+            return ecfRecordCounter;
+        }
+
+        private async Task<int> ExportStudentSchoolClassAttendances(BbsPlanungDbReader bbsPlanungDbReader, EcfTableWriter ecfTableWriter, string[] ecfHeaders)
+        {
+            var ecfRecordCounter = 0;
+
+            if (ecfHeaders != null && ecfHeaders.Length > 0)
+            {
+                await ecfTableWriter.WriteHeadersAsync(ecfHeaders);
+            }
+            else
+            {
+                await ecfTableWriter.WriteHeadersAsync(
+                    EcfHeaders.StudentId,
+                    EcfHeaders.SchoolClassId);
+            }
+
+            await foreach (var student in bbsPlanungDbReader.StudentsAsync(_config.EcfExport.SchoolNo))
+            {
+                ecfTableWriter.TrySetValue(EcfHeaders.StudentId, student.Id.ToString());
+                ecfTableWriter.TrySetValue(EcfHeaders.SchoolClassId, student.SchoolClass);
+
+                await ecfTableWriter.WriteAsync();
+
+                ecfRecordCounter++;
+            }
+
+            return ecfRecordCounter;
+        }
+
+        private async Task<int> ExportTeachers(BbsPlanungDbReader bbsPlanungDbReader, EcfTableWriter ecfTableWriter, string[] ecfHeaders)
+        {
+            var ecfRecordCounter = 0;
+
+            if (ecfHeaders != null && ecfHeaders.Length > 0)
+            {
+                await ecfTableWriter.WriteHeadersAsync(ecfHeaders);
+            }
+            else
+            {
+                await ecfTableWriter.WriteHeadersAsync(
+                    EcfHeaders.Id,
+                    EcfHeaders.Code,
+                    EcfHeaders.LastName,
+                    EcfHeaders.FirstName,
+                    EcfHeaders.Gender,
+                    EcfHeaders.Birthdate);
+            }
+
+            await foreach (var teacher in bbsPlanungDbReader.TeachersAsync(_config.EcfExport.SchoolNo))
+            {
+                ecfTableWriter.TrySetValue(EcfHeaders.Id, teacher.Id);
+                ecfTableWriter.TrySetValue(EcfHeaders.Code, teacher.Code);
+                ecfTableWriter.TrySetValue(EcfHeaders.LastName, teacher.Lastname);
+                ecfTableWriter.TrySetValue(EcfHeaders.FirstName, teacher.Firstname);
+                ecfTableWriter.TrySetValue(EcfHeaders.Gender, teacher.GetGender());
+                ecfTableWriter.TrySetValue(EcfHeaders.Birthdate, teacher.GetBirthdate());
+
+                await ecfTableWriter.WriteAsync();
+
+                ecfRecordCounter++;
+            }
+
+            return ecfRecordCounter;
+        }
+
+        private void PrepareExportFolder()
+        {
+            if (Directory.Exists(_config.EcfExport.FolderName))
+            {
+                foreach (var fileName in Directory.EnumerateFiles(_config.EcfExport.FolderName, "*.csv"))
+                {
+                    File.Delete(fileName);
+                }
+            }
+            else
+            {
+                Directory.CreateDirectory(_config.EcfExport?.FolderName);
+            }
+        }
+    }
+}
