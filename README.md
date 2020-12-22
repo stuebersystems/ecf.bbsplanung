@@ -1,8 +1,12 @@
+![GitHub](https://img.shields.io/github/license/stuebersystems/ecf.bbsplanung?style=flat-square)
+
 # ECF Tool for BBS-Planung
 
-## Einführung
+Eine .NET Core Kommandozeilenanwendung zum Exportieren Daten aus einer BBS-Planung-Datenbank ins ECF-Format.
 
-Das ECF Tool for BBS-Planung ist eine .NET-Kommandozeilenanwendung zum Exportieren Daten aus einer BBS-Planung-Datenbank ins ECF-Format.
+## Installation
+
+Die Installation erfolgt automatisch im Kontext des PowerShell-Moduls [PSEnbrea](https://github.com/stuebersystems/psenbrea).
 
 ## Systemvoraussetzungen
 
@@ -10,7 +14,7 @@ Das ECF Tool for BBS-Planung benötigt die [.NET Core 3.1 Laufzeitumgebung](http
 
 ## Dokumentation
 
-tbd
+Die Dokumentation findest Du im [GitHub-Wiki](https://github.com/stuebersystems/ecf.bbsplanung/wiki).
 
 ## Kann ich mithelfen?
 
