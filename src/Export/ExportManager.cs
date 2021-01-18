@@ -1,8 +1,8 @@
-﻿#region ENBREA - Copyright (C) 2020 STÜBER SYSTEMS GmbH
+﻿#region ENBREA - Copyright (C) 2021 STÜBER SYSTEMS GmbH
 /*    
  *    ENBREA
  *    
- *    Copyright (C) 2020 STÜBER SYSTEMS GmbH
+ *    Copyright (C) 2021 STÜBER SYSTEMS GmbH
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -44,7 +44,7 @@ namespace Ecf.BbsPlanung
         {
         }
 
-        public async override Task Execute(bool ThrowExecptions = false)
+        public async override Task Execute()
         {
             var bbsPlanungDbReader = new BbsPlanungDbReader(_config.EcfExport.DatabaseConnection);
             try
@@ -68,32 +68,24 @@ namespace Ecf.BbsPlanung
                 // Report status
                 Console.WriteLine($"[Extracting] {_tableCounter} table(s) and {_recordCounter} record(s) extracted");
             }
-            catch (Exception ex)
+            catch 
             {
-                if (!ThrowExecptions)
-                {
-                    // Report error 
-                    Console.WriteLine();
-                    Console.WriteLine($"[Error] Extracting failed. Only {_tableCounter} table(s) and {_recordCounter} record(s) extracted");
-                    Console.WriteLine($"[Error] Reason: {ex.Message}");
-                }
-                else
-                {
-                    throw;
-                }
+                // Report error 
+                Console.WriteLine();
+                Console.WriteLine($"[Error] Extracting failed. Only {_tableCounter} table(s) and {_recordCounter} record(s) extracted");
+                throw;
             }
         }
 
         private async Task Execute(string ecfTableName, BbsPlanungDbReader bbsPlanungDbReader, Func<BbsPlanungDbReader, EcfTableWriter, string[], Task<int>> action)
         {
-            EcfExportFile ecfFile = _config.EcfExport?.Files?.FirstOrDefault(x => x.Name.ToLower() == ecfTableName.ToLower());
-            if (ecfFile != null)
+            if (ShouldExportTable(ecfTableName, out var ecfFile))
             {
                 // Report status
                 Console.WriteLine($"[Extracting] [{ecfTableName}] Start...");
 
                 // Generate ECF file name
-                var ecfFileName = Path.ChangeExtension(Path.Combine(_config.EcfExport.FolderName, ecfTableName), "csv");
+                var ecfFileName = Path.ChangeExtension(Path.Combine(_config.EcfExport?.TargetFolderName, ecfTableName), "csv");
 
                 // Create ECF file for export
                 using var ecfWriterStream = new FileStream(ecfFileName, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
@@ -102,7 +94,7 @@ namespace Ecf.BbsPlanung
                 using var ecfWriter = new CsvWriter(ecfWriterStream, Encoding.UTF8);
 
                 // Call table specific action
-                var ecfRecordCounter = await action(bbsPlanungDbReader, new EcfTableWriter(ecfWriter), ecfFile.Headers);
+                var ecfRecordCounter = await action(bbsPlanungDbReader, new EcfTableWriter(ecfWriter), ecfFile?.Headers);
 
                 // Inc counters
                 _recordCounter += ecfRecordCounter;
@@ -242,21 +234,6 @@ namespace Ecf.BbsPlanung
             }
 
             return ecfRecordCounter;
-        }
-
-        private void PrepareExportFolder()
-        {
-            if (Directory.Exists(_config.EcfExport.FolderName))
-            {
-                foreach (var fileName in Directory.EnumerateFiles(_config.EcfExport.FolderName, "*.csv"))
-                {
-                    File.Delete(fileName);
-                }
-            }
-            else
-            {
-                Directory.CreateDirectory(_config.EcfExport?.FolderName);
-            }
         }
     }
 }
