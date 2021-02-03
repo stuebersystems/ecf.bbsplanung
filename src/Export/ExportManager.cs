@@ -24,7 +24,6 @@ using Enbrea.Csv;
 using Enbrea.Ecf;
 using System;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -46,7 +45,7 @@ namespace Ecf.BbsPlanung
 
         public async override Task Execute()
         {
-            var bbsPlanungDbReader = new BbsPlanungDbReader(_config.EcfExport.DatabaseConnection);
+            await using var bbsPlanungDbReader = new BbsPlanungDbReader(_config.EcfExport.DatabaseConnection);
             try
             {
                 // Init counters
@@ -59,11 +58,17 @@ namespace Ecf.BbsPlanung
                 // Preperation
                 PrepareExportFolder();
 
+                // Connect reader
+                await bbsPlanungDbReader.ConnectAsync();
+
                 // Education
                 await Execute(EcfTables.Teachers, bbsPlanungDbReader, async (r, w, h) => await ExportTeachers(r, w, h));
                 await Execute(EcfTables.SchoolClasses, bbsPlanungDbReader, async (r, w, h) => await ExportSchoolClasses(r, w, h));
                 await Execute(EcfTables.Students, bbsPlanungDbReader, async (r, w, h) => await ExportStudents(r, w, h));
                 await Execute(EcfTables.StudentSchoolClassAttendances, bbsPlanungDbReader, async (r, w, h) => await ExportStudentSchoolClassAttendances(r, w, h));
+
+                // Disconnect reader
+                await bbsPlanungDbReader.DisconnectAsync();
 
                 // Report status
                 Console.WriteLine($"[Extracting] {_tableCounter} table(s) and {_recordCounter} record(s) extracted");
