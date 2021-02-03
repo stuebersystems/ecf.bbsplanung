@@ -45,7 +45,7 @@ namespace Ecf.BbsPlanung
                 }
                 else
                 {
-                    throw new InvalidOperationException($"No configuration for \"{EmbeddedNodeName}\" found in file \"{fileName}\").");
+                    throw new InvalidOperationException($"No configuration for \"{EmbeddedNodeName}\" found in file \"{fileName}\".");
                 }
             }
             else
