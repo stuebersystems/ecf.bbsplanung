@@ -31,9 +31,8 @@ namespace Ecf.BbsPlanung
         {
             var command = new Command("export", "Exports data from a BBS-Planung database to ECF files")
             {
-                new Option(new[] { "--config", "-c" }, "Path to existing JSON configuration file")
+                new Option<FileInfo>(new[] { "--config", "-c" }, "Path to existing JSON configuration file")
                 {
-                    Argument = new Argument<FileInfo>(),
                     IsRequired = true
                 },
             };
