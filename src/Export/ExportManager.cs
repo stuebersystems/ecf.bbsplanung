@@ -66,6 +66,7 @@ namespace Ecf.BbsPlanung
                 await Execute(EcfTables.SchoolClasses, bbsPlanungDbReader, async (r, w, h) => await ExportSchoolClasses(r, w, h));
                 await Execute(EcfTables.Students, bbsPlanungDbReader, async (r, w, h) => await ExportStudents(r, w, h));
                 await Execute(EcfTables.StudentSchoolClassAttendances, bbsPlanungDbReader, async (r, w, h) => await ExportStudentSchoolClassAttendances(r, w, h));
+                await Execute(EcfTables.StudentSubjects, bbsPlanungDbReader, async (r, w, h) => await ExportStudentSubjects(r, w, h));
 
                 // Disconnect reader
                 await bbsPlanungDbReader.DisconnectAsync();
@@ -167,7 +168,7 @@ namespace Ecf.BbsPlanung
                 ecfTableWriter.TrySetValue(EcfHeaders.FirstName, student.Firstname);
                 ecfTableWriter.TrySetValue(EcfHeaders.Gender, student.GetGender());
                 ecfTableWriter.TrySetValue(EcfHeaders.Birthdate, student.GetBirthdate());
-                //ecfTableWriter.TrySetValue(EcfHeaders.StudentNo, student.StudentNo);
+                ecfTableWriter.TrySetValue(EcfHeaders.StudentNo, student.StudentNo);
 
                 await ecfTableWriter.WriteAsync();
 
@@ -188,12 +189,44 @@ namespace Ecf.BbsPlanung
             else
             {
                 await ecfTableWriter.WriteHeadersAsync(
+                    EcfHeaders.Id,
                     EcfHeaders.StudentId,
                     EcfHeaders.SchoolClassId);
             }
 
             await foreach (var student in bbsPlanungDbReader.StudentsAsync(_config.EcfExport.SchoolNo))
             {
+                ecfTableWriter.TrySetValue(EcfHeaders.Id, student.Id.ToString() + "_" + student.SchoolClass);
+                ecfTableWriter.TrySetValue(EcfHeaders.StudentId, student.Id.ToString());
+                ecfTableWriter.TrySetValue(EcfHeaders.SchoolClassId, student.SchoolClass);
+
+                await ecfTableWriter.WriteAsync();
+
+                ecfRecordCounter++;
+            }
+
+            return ecfRecordCounter;
+        }
+
+        private async Task<int> ExportStudentSubjects(BbsPlanungDbReader bbsPlanungDbReader, EcfTableWriter ecfTableWriter, string[] ecfHeaders)
+        {
+            var ecfRecordCounter = 0;
+
+            if (ecfHeaders != null && ecfHeaders.Length > 0)
+            {
+                await ecfTableWriter.WriteHeadersAsync(ecfHeaders);
+            }
+            else
+            {
+                await ecfTableWriter.WriteHeadersAsync(
+                    EcfHeaders.Id,
+                    EcfHeaders.StudentId,
+                    EcfHeaders.SchoolClassId);
+            }
+
+            await foreach (var student in bbsPlanungDbReader.StudentsAsync(_config.EcfExport.SchoolNo))
+            {
+                ecfTableWriter.TrySetValue(EcfHeaders.Id, student.Id.ToString() + "_" + student.SchoolClass);
                 ecfTableWriter.TrySetValue(EcfHeaders.StudentId, student.Id.ToString());
                 ecfTableWriter.TrySetValue(EcfHeaders.SchoolClassId, student.SchoolClass);
 
