@@ -50,7 +50,7 @@ namespace Ecf.BbsPlanung
             }
             else
             {
-                throw new FileNotFoundException($"File \"{fileName}\") does not exists.");
+                throw new FileNotFoundException($"File \"{fileName}\" does not exists.");
             }
         }
     }
